@@ -1,0 +1,20 @@
+# Cold-chain MDVRPLTW: 3 depots, 50 dark stores, 4 compartments, traffic, thermal penalty
+_target_: routefinder.envs.mtdvrp.env.MTVRPEnv
+name: mtdvrp
+
+check_solution: False # for faster training
+select_start_nodes_fn: "all" # never "random": it can start at a customer
+
+# MTVRPEnv builds ColdChainMTVRPGenerator(**generator_params)
+generator_params:
+  num_depot: 3
+  num_loc: 50
+  # speed defaults to COLDCHAIN_SPEED (routefinder/envs/mtdvrp/generator.py);
+  # override with +env.generator_params.speed=<value>
+
+# generate with: python scripts/generate_data.py
+data_dir: ${paths.root_dir}/data/
+val_file: [mdvrpltw/val/50.npz]
+test_file: [mdvrpltw/test/50.npz]
+val_dataloader_names: [coldchain50]
+test_dataloader_names: ${env.val_dataloader_names}

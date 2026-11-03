@@ -1,0 +1,63 @@
+# @package _global_
+
+######################################################################
+# Cold-chain MDVRPLTW base experiment (loaded by default from main.yaml).
+# NOTE: `python run.py` with this config trains RouteFinder from scratch.
+#       EAL fine-tuning from a pretrained checkpoint goes through run_eal.py.
+######################################################################
+
+defaults:
+  - override /model: routefinder.yaml
+  - override /env: mtdvrp_coldchain.yaml
+  - override /callbacks: default.yaml
+  - override /trainer: default.yaml
+  - override /logger: csv.yaml # local; use logger=wandb for W&B
+
+seed: 69420
+
+tags: ["coldchain", "mdvrpltw"]
+
+model:
+  batch_size: 64
+  val_batch_size: 128
+  test_batch_size: ${model.val_batch_size}
+  train_data_size: 10_000
+  val_data_size: 128 # unused if provided by env
+  test_data_size: 1000 # unused if provided by env
+  optimizer_kwargs:
+    lr: 3e-4
+    weight_decay: 1e-6
+  # Same as the pretrained RouteFinder checkpoints. Dividing by a running mean is
+  # scale-free, so it absorbs the thermal term's change in reward scale.
+  normalize_reward: "exponential"
+  norm_operation: "div"
+  alpha: 0.25
+  policy:
+    embed_dim: 128
+    # Multi-depot / cold-chain embeddings. The policy defaults are single-depot and
+    # would treat depots 2..N as customers.
+    init_embedding:
+      _target_: routefinder.models.env_embeddings.mtvrp.init.MTVRPInitEmbeddingFull
+      embed_dim: ${model.policy.embed_dim}
+    context_embedding:
+      _target_: routefinder.models.env_embeddings.mtvrp.context.MTVRPContextEmbeddingFull
+      embed_dim: ${model.policy.embed_dim}
+  metrics:
+    # tour_length / thermal: the two cost terms (reward = -(tour_length + thermal)),
+    # averaged over all rollouts. best_*: the same terms for the best solution per
+    # instance, i.e. the one behind max_aug_reward.
+    train: ["loss", "reward", "norm_reward", "norm_vals", "tour_length", "thermal"]
+    # no gap_to_bks: there are no best-known solutions for this problem
+    val: ["reward", "max_reward", "max_aug_reward", "best_tour_length", "best_thermal"]
+    test: ${.val}
+    log_on_step: True
+
+trainer:
+  accelerator: "auto"
+  precision: "32" # 16-mixed is unreliable on MPS
+  max_epochs: 10
+
+callbacks:
+  model_checkpoint:
+    monitor: "val/reward" # single val dataloader -> no "/<name>" suffix
+    mode: "max"
